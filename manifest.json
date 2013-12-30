@@ -11,7 +11,7 @@
     "300x300": "images/icons/icon-300x300.png"
   },
   "AppName": {
-    "en": "Audio FFT"
+    "en": "Visualiser"
   },
   "BundleIdentifier": "audio-fft-processing",
   "BundleType": "Application",

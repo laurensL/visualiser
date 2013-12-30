@@ -5,19 +5,202 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
     <title>Visualizer</title>
     <link rel="stylesheet" href="css/style.css">
+    <link rel="stylesheet" type="text/css" href="css/easydropdown.css"/>
+    <link rel='stylesheet' type="text/css" href='css/spectrum.css' />
+    <link rel="stylesheet" href="http://code.jquery.com/ui/1.10.3/themes/smoothness/jquery-ui.css">
   </head>
   <body>
-    
-<script>
-</script>
-
 	<script src="https://github.com/downloads/processing-js/processing-js/processing-1.4.1.js"></script>
+	<script src="http://code.jquery.com/jquery-1.9.1.js"></script>
+  	<script src="http://code.jquery.com/ui/1.10.3/jquery-ui.js"></script>
+  	<script src="scripts/jquery.easydropdown.min.js"></script>
+  	<script src='scripts/spectrum.js'></script>
+  	<script src="scripts/toxiclibs.min.js"></script>
 	<script type="text/processing" data-processing-target="pjs">
+	//import processing.opengl.*;
 
+	// If you want to add a style just add it to this 'enum'
+	var STYLES = {
+  		BARS : {value: 0, name: "Bars", minimumBands: 4, maximumBands:14}, 
+  		CIRCLE: {value: 1, name: "Circle", minimumBands: 2, maximumBands:128},
+  		SHAPES: {value: 2, name: "Shapes", minimumBands: 2, maximumBands:8},
+  		STRIPES: {value: 3, name: "Stripes", minimumBands: 180, maximumBands:540},
+  		NONE: {value: 4, name: "None", minimumBands: 0, maximumBands:0}
+	};
+
+	var InterpolateStrategy = toxi.math.InterpolateStrategy,
+    SigmoidInterpolation = toxi.math.SigmoidInterpolation,
+    MathUtils = toxi.math.MathUtils,
+    Vec2D = toxi.geom.Vec2D,
+    TColor = toxi.color.TColor;
+
+	// keepers of transition state & target
+	float transition, transTarget;
+
+	// use a S-Curve to achieve an ease in/out effect
+	InterpolateStrategy is=new SigmoidInterpolation(3);
+
+	// start style
+	int choosenStyle = STYLES.CIRCLE.value;
+	var options = {};
+	color choosenColor = #3F00FF;
+	String tempColor;
 	// the number of FFT bands we want to receive
-	int numberOfBands = 128;
-	// if we don't create a getter like this, we will not
-	// be able to retrieve sketch.numberOfBands from the external js
+	int numberOfBands = 128; //128
+	int screenWidth = screen.width;
+	int screenHeight = screen.height;
+	int spotifyWidth = $(window).width();
+	int spotifyHeight = $(window).height() - 60;
+	int minimumBands = STYLES.CIRCLE.minimumBands;
+	int maximumBands = STYLES.CIRCLE.maximumBands;
+	float max_distance;
+
+
+	$(function() {
+		initSlider();
+		loadPreferences();
+    	$( "#shapeButton" ).button();
+    	$( "#pickers" ).hide();
+    	$( "#slider" ).hide();
+    	$( "#numberOfBands" ).hide();
+
+    	$( "#shapeButton" ).click(function() {
+			$( "#pickers" ).toggle( "slide", options, 500 );
+			$( "#slider" ).toggle( "slide", options, 500 );
+			$( "#numberOfBands" ).toggle( "slide", options, 500 );
+				savePreferences();
+		});
+
+    	$("#colorPicker").spectrum({
+    		showInitial: true,
+    		color: '#3F00FF', // Make sure this the same as choosenColor
+    		change: function(color) {
+        		tempColor = color.toRgbString();
+        		setColors();
+    		}
+		});
+
+    	// TODO implement a timer so this function wont be called >9000 times when you resize
+    	$(window).resize(function(){
+				spotifyWidth = $(window).width();
+				spotifyHeight = $(window).height() - 60;
+
+				size( spotifyWidth, spotifyHeight );
+  		});
+
+		document.getElementById('styleDropdown').innerHTML = populateStyleDropdown();
+
+		$('#dropDown').change(function() {
+			var item=$(this);
+		    choosenStyle = item.val();
+		    $( "#slider" ).slider( "destroy" );
+			setMaxMinBands();
+			initSlider();
+		});
+ 	});
+
+
+	// Function that based on the style will select the correct values
+	// Also this will lower the numberOfBands to the new maximumBands if the new style has a lower maximum then the current numberOfBands
+	void setMaxMinBands(){
+		if (choosenStyle == STYLES.CIRCLE.value){
+			minimumBands = STYLES.CIRCLE.minimumBands;
+			maximumBands = STYLES.CIRCLE.maximumBands;
+		} else if (choosenStyle == STYLES.BARS.value) {
+			minimumBands = STYLES.BARS.minimumBands;
+			maximumBands = STYLES.BARS.maximumBands;
+		} else if (choosenStyle == STYLES.NONE.value) {
+			minimumBands = STYLES.NONE.minimumBands;
+			maximumBands = STYLES.NONE.maximumBands;
+		} else if (choosenStyle == STYLES.SHAPES.value) {
+			minimumBands = STYLES.SHAPES.minimumBands;
+			maximumBands = STYLES.SHAPES.maximumBands;
+		} else if (choosenStyle == STYLES.STRIPES.value) {
+			minimumBands = STYLES.STRIPES.minimumBands;
+			maximumBands = STYLES.STRIPES.maximumBands;
+		}
+
+		numberOfBands > maximumBands? numberOfBands=maximumBands : numberOfBands;
+	}
+
+	// checks if the browser / system supports HTML5 localstorage
+	function supportsHtml5Storage() {
+  		try {
+    		return 'localStorage' in window && window['localStorage'] !== null;
+  		} catch (e) {
+   			 return false;
+  		}
+	}
+
+	// Will save the color, style and numberofbands in local storage
+	function savePreferences(){
+		if (supportsHtml5Storage() == false){
+			return false;
+		}
+		
+		localStorage["visualiser.numberOfBands"] = numberOfBands;
+		localStorage["visualiser.color"] = choosenColor;
+		localStorage["visualiser.style"] = choosenStyle;
+		return true;
+	}
+
+	function loadPreferences(){
+		if (supportsHtml5Storage() == false){
+			return false;
+		}
+		if (localStorage.getItem("visualiser.numberOfBands") === null) { return false; }
+		numberOfBands = parseInt(localStorage["visualiser.numberOfBands"]);
+		choosenColor = parseInt(localStorage["visualiser.color"]);
+		choosenStyle = parseInt(localStorage["visualiser.style"]);
+		return true;
+	}
+
+	void mousePressed() {
+		// toggle transition target state
+		transTarget=(++transTarget % 2);
+	}
+
+	void initSlider(){
+		$(function() {
+			$( "#slider" ).slider({
+	     		value:numberOfBands,
+	     		min: minimumBands,
+	     		max: maximumBands,
+	      		slide: function( event, ui ) {
+	        		numberOfBands = ui.value;
+	      		}
+	    	});
+		});
+	}
+
+	// ffs
+ 	void setColors(){
+ 		var temp = tempColor.substring(3,tempColor.length);
+ 		temp = temp.replace(')','');
+ 		temp = temp.split(",");
+ 		temp[0] = temp[0].substring(1,temp[0].length);
+ 		temp[1] = temp[1].trim();
+ 		temp[2] = temp[2].trim();
+ 		choosenColor = color(temp[0], temp[1], temp[2]);
+ 	}
+
+	// Als ge een betere methode weet pas maar aan
+ 	String populateStyleDropdown(){
+ 	 	var toReturn = '';
+ 		toReturn += '<select id="dropDown" class="dropdown">';
+ 		toReturn += '<option selected>Choose your style</option>';
+ 		for (var style in STYLES) {
+ 			toReturn += '<option';
+ 			toReturn += ' value="';
+ 			toReturn += STYLES[style].value
+ 			toReturn += '">';
+ 			toReturn += STYLES[style].name;
+ 			toReturn += '</option>';
+ 		};
+		toReturn +=  '</select>';
+		return toReturn;
+ 	}
+
 	int numberOfBands(){
 		return numberOfBands;
 	}
@@ -26,13 +209,13 @@
 	float[] fft = new float[numberOfBands];
 
 	void setup(){
-		// I've noticed that performance degrades quickly with a larger canvas
-		size( 1000, 850 );
-		background(0);
-		frameRate(60);
+		size( spotifyWidth, spotifyHeight );
+		//background(255);
+		frameRate(60); 
 		
 		PFont fontA = loadFont("courier");
-		textFont(fontA, 14); 
+		textFont(fontA, 14);
+		max_distance = dist(0, 0, spotifyWidth, spotifyHeight);
 	}
 	
 	// call this method from within the audio data callback
@@ -40,61 +223,224 @@
 		fft = newFFT;
 	}
 	
-	// draw the bars
 	void draw(){
 		//background(0);
-		fill(0, 20);
+		if (choosenStyle == STYLES.CIRCLE.value){
+			drawCircle();
+		} else if (choosenStyle == STYLES.BARS.value) {
+			drawBars();
+		} else if (choosenStyle == STYLES.NONE.value) {
+			drawNothing();
+		} else if (choosenStyle == STYLES.STRIPES.value) {
+			drawStripes();
+		} else if (choosenStyle == STYLES.SHAPES.value) {
+			drawShapes();
+		}
+
+	}
+
+	void drawCircle(){
+		fill(0);
 		rect(0, 0, width, height);
 
-		/*
-		float barWidth = ceil(width / (float)numberOfBands);
-
-		beginShape();
-		vertex(0, height);
-		for(int i = 0; i < numberOfBands; i++){
-			float x = i * barWidth;
-			float y = height;
-			float w = barWidth;
-			float h = map(fft[i], -100, 10, 0, -height);	// audio data seems to have about this range
-
-			vertex(x, y + h);
-			vertex(x + w, y + h);
-		}
-		vertex(width, height);
-		endShape();
-		*/
-
-		float baseRadius = 50;
-		float maxRadiusAddition = 300;
+		float baseRadius = 280;//float baseRadius = 50;
+		float maxRadiusAddition = 300; //300
 
 		float phase = PI / 2.;
 		float barPhaseIncrement = TWO_PI / (float)numberOfBands;
 		noFill()
-		stroke(255);
-		strokeWeight(1);
+
+		// Bar color
+ 		stroke(choosenColor); //stroke(255);
+		strokeWeight(1); //strokeWeight(1);
 		beginShape();
 		for(int i = 0; i < numberOfBands; i++){
 			float radius = baseRadius + map(fft[i], -100, 10, 0, maxRadiusAddition);
 			float x = cos(phase) * radius;
 			float y = sin(phase) * radius;
 			vertex(x + width / 2., y + height / 2.);
+			//vertex((x + width / 2.), -y + height / 2.);
 			phase += barPhaseIncrement / 2.;
 		}
 		for(int i = numberOfBands - 1; i >= 0; i--){
 			float radius = baseRadius + map(fft[i], -100, 10, 0, maxRadiusAddition);
 			float x = cos(phase) * radius;
 			float y = sin(phase) * radius;
+			//vertex(x + width / 2., y + height / 2.);
+			vertex((x + width / 2.), y + height / 2.);
+			phase += barPhaseIncrement / 2.;
+		}		
+
+		endShape();
+		strokeWeight(2);
+		beginShape();
+		for(int i = numberOfBands - 1; i >= 0; i--){
+			float radius = 200 + map(fft[i], -100, 10, 0, 250);
+			float x = cos(phase) * radius;
+			float y = sin(phase) * radius;
+			//vertex(x + width / 2., y + height / 2.);
+			vertex((x + width / 2.), y + height / 2.);
+			phase += barPhaseIncrement / 2.;
+		}	
+		for(int i = 0; i < numberOfBands; i++){
+			float radius = 200 + map(fft[i], -100, 10, 0, 250);
+			float x = cos(phase) * radius;
+			float y = sin(phase) * radius;
 			vertex(x + width / 2., y + height / 2.);
+			//vertex((x + width / 2.), -y + height / 2.);
+			phase += barPhaseIncrement / 2.;
+		}	
+
+		endShape();
+		strokeWeight(3);
+		beginShape();
+		for(int i = 0; i < numberOfBands; i++){
+			float radius = 100 + map(fft[i], -100, 10, 0, 150);
+			float x = cos(phase) * radius;
+			float y = sin(phase) * radius;
+			vertex(x + width / 2., y + height / 2.);
+			//vertex((x + width / 2.), -y + height / 2.);
 			phase += barPhaseIncrement / 2.;
 		}
-		endShape();
+		for(int i = numberOfBands - 1; i >= 0; i--){
+			float radius = 100 + map(fft[i], -100, 10, 0, 150);
+			float x = cos(phase) * radius;
+			float y = sin(phase) * radius;
+			//vertex(x + width / 2., y + height / 2.);
+			vertex((x + width / 2.), y + height / 2.);
+			phase += barPhaseIncrement / 2.;
+		}	
+
 		
+		for(int i = numberOfBands - 1; i >= 0; i--){
+			float radius = 25 + map(fft[i], -100, 10, 0, 95);
+			float x = cos(phase) * radius;
+			float y = sin(phase) * radius;
+			//vertex(x + width / 2., y + height / 2.);
+			vertex((x + width / 2.), y + height / 2.);
+			phase += barPhaseIncrement / 2.;
+		}
+		for(int i = 0; i < numberOfBands; i++){
+			float radius = 25 + map(fft[i], -100, 10, 0, 95);
+			float x = cos(phase) * radius;
+			float y = sin(phase) * radius;
+			vertex(x + width / 2., y + height / 2.);
+			//vertex((x + width / 2.), -y + height / 2.);
+			phase += barPhaseIncrement / 2.;
+		}	
+
+		endShape();
 		fill(255);
 		text(frameRate,20,20);
+		text(numberOfBands,20,35);
+		text(spotifyWidth + " - " + spotifyHeight, 20, 50);
 	}
+
+	void drawNothing(){
+		fill(255);
+		rect(0, 0, width, height);
+	}
+
+	void drawBars(){
+		numberOfBands = Math.floor((Math.random()*STYLES.BARS.maximumBands)+2);
+		fill(255);
+		rect(0, 0, width, height);
+
+		noFill();
+		fill(0);
+		text(frameRate,20,20);
+		for (var i = 0; i < numberOfBands; i++) {
+			text(fft[i],20,35 + (i*10));
+		}
+
+		// Put the bars in the middle of the COMPUTERSCREEN!!
+		// Not the spotify area
+		translate((spotifyWidth/2)-12, 300);
+
+		for (var i = 0; i < numberOfBands; i++) {
+
+			boxWidth = i * 55;
+			boxHeight = fft[i] * 4;
+		    fill(choosenColor);
+		    rect(boxWidth, -100, 50, -boxHeight);
+		    rect(-(boxWidth), -100, 50, -boxHeight);
+		    rect(boxWidth, 500, 50, boxHeight);
+		    rect(-(boxWidth), 500, 50, boxHeight);
+  		}
+  		for (var i = 0; i < numberOfBands; i++) {
+			boxWidth = i * 55;
+			boxHeight = fft[i] * 4;
+		    fill(choosenColor);
+		    rect(boxWidth, -100, 50, -boxHeight);
+		    rect(-(boxWidth), -100, 50, -boxHeight);
+		    rect(boxWidth, 500, 50, boxHeight);
+		    rect(-(boxWidth), 500, 50, boxHeight);
+  		}
+		
+
+	}
+
+	void drawStripes(){
+		background(0);
+		float w2=spotifyWidth * 0.5;
+		float h2=spotifyHeight * 0.5;
+		translate(w2, h2);
+		// update transition
+		transition += (transTarget - transition) * 0.01;
+		Vec2D normUp = new Vec2D(0, -1);
+		// define a color container using HSV
+		TColor col = TColor.newHSV(0, 1, 1);
+		for(int i = numberOfBands; i < 360 + numberOfBands; i += 2) {
+			float theta = radians(i);
+			// create a polar coordinate
+			Vec2D polar = new Vec2D(100,theta);
+			// use theta as color hue (ensure theta is properly wrapped)
+			col.setHue((polar.y / TWO_PI) % 1);
+			// also use theta to manipulate line length
+			float len = noise(polar.y * 4) * 100;
+			// convert polar coord into cartesian space (to obtain position on a circle)
+			Vec2D circ = polar.copy().toCartesian();
+			// create another coord splicing the circle at the top and using theta difference as position on a line
+			Vec2D linear = new Vec2D((MathUtils.THREE_HALVES_PI - polar.y) * w2 / PI + w2, 0);
+			// interprete circular position as normal/direction vector 
+			Vec2D dir = circ.getNormalized();
+			// interpolate both position & normal based on current transition state
+			circ.interpolateToSelf(linear, transition,is);
+			dir.interpolateToSelf(normUp, transition,is).normalizeTo(len + map(fft[i/2], -100, 10, 0,100));
+			// apply color & draw line
+			stroke(col.toARGB());
+			line(circ.x, circ.y, circ.x + dir.x, circ.y + dir.y);
+		}
+	}
+
+	// Will draw squares, rectangles and circles
+	void drawShapes(){
+		
+	}
+
+	void drawPicture(){
+
+	}
+
+	//<input type='text' id="colorPicker" />
+	//<span id="styleDropdown" />
+	//<div id="slider" style="width:260px; margin:15px;">TEST</div>
 	</script>
-	<canvas id="pjs"></canvas>
-    
+	<div id="settings">
+		<img id="shapeButton" src="/images/settings_ico.png" alt="Change settings" />
+		<div id="pickers">
+			<input type='text' id="colorPicker" />
+			<span id="styleDropdown" />
+			
+		</div>
+	</div>
+	<div>
+		<label id="numberOfBands">Detail:</label>
+		<div id="slider" style="width:260px; margin:15px;"></div>
+	</div>
+	<div id="playerContainer">
+		<canvas id="pjs"></canvas>
+	</div>
     <script src="scripts/main.js"></script>
   </body>
 </html>
