@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+    <title>Visualizer</title>
+    <link rel="stylesheet" href="css/style.css">
+  </head>
+  <body>
+    
+<script>
+</script>
+
+	<script src="https://github.com/downloads/processing-js/processing-js/processing-1.4.1.js"></script>
+	<script type="text/processing" data-processing-target="pjs">
+
+	// the number of FFT bands we want to receive
+	int numberOfBands = 16; //128
+	int gridWidth = 1000;
+	int gridHeight = 850;
+
+	int boxWidth = 0;
+	int boxHeight = 0;
+	String color = '#6ACC3D';
+	// if we don't create a getter like this, we will not
+	// be able to retrieve sketch.numberOfBands from the external js
+	int numberOfBands(){
+		return numberOfBands;
+	}
+	
+	// this array will hold the audio data
+	float[] fft;// = new float[numberOfBands];
+
+	void setup(){
+		fft = new float[numberOfBands];
+		// I've noticed that performance degrades quickly with a larger canvas
+		size( gridWidth, gridHeight );
+		background(255);
+		frameRate(15);
+		
+		PFont fontA = loadFont("courier");
+		textFont(fontA, 14); 
+	}
+	
+	// call this method from within the audio data callback
+	void updateData(float[] newFFT){
+		fft = newFFT;
+	}
+	
+	// draw the bars
+	void draw(){
+		fill(255);
+		rect(0, 0, width, height);
+		noFill();
+		fill(0);
+		text(frameRate,20,20);
+		for (var i = 0; i < numberOfBands; i++) {
+			text(fft[i],20,35 + (i*10));
+		}
+		boxWidth = (numberOfBands-1) * 25;
+		boxHeight = 200;
+		// Put the bars in the middle of the COMPUTERSCREEN!!
+		// Not the spotify area
+		translate(width/2, 300);
+		//Draw a black box around the bars
+		//fill(0);
+		//rect(-boxWidth,0,(boxWidth*2)+20, boxHeight);		
+		//fill(41, 137, 216);
+		for (var i = 0; i < numberOfBands; i++) {
+		    //calculate the color
+		    //var c = map(fft[i], min(fft), max(fft), 0, 255);
+		    //var c = random(20, 220);
+		    fill(41, 137, 216);
+		    //calculate the height of the bar
+		    //var h = map(fft[i], 0, 96, 0, 96);
+		    //var h = random(50, fft[i]);
+		    rect(i * 25, 0, 20, -fft[i]);
+		    rect(-(i * 25), 0, 20, -fft[i]);
+		    rect(i * 25, 200, 20, fft[i]);
+		    rect(-(i * 25), 200, 20, fft[i]);
+  		}
+  		fill(255);
+	}
+	</script>
+	<canvas id="pjs"></canvas>
+    
+    <script src="scripts/main.js"></script>
+  </body>
+</html>

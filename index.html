@@ -23,8 +23,8 @@
 	var STYLES = {
   		BARS : {value: 0, name: "Bars", minimumBands: 4, maximumBands:14}, 
   		CIRCLE: {value: 1, name: "Circle", minimumBands: 2, maximumBands:128},
-  		SHAPES: {value: 2, name: "Shapes", minimumBands: 2, maximumBands:8},
-  		STRIPES: {value: 3, name: "Stripes", minimumBands: 180, maximumBands:540},
+  		PICTURE: {value: 2, name: "Picture", minimumBands: 0, maximumBands:0},
+  		STRIPES: {value: 3, name: "Stripes", minimumBands: 1, maximumBands:90},
   		NONE: {value: 4, name: "None", minimumBands: 0, maximumBands:0}
 	};
 
@@ -48,12 +48,14 @@
 	// the number of FFT bands we want to receive
 	int numberOfBands = 128; //128
 	int screenWidth = screen.width;
+	boolean visible = false;
 	int screenHeight = screen.height;
 	int spotifyWidth = $(window).width();
 	int spotifyHeight = $(window).height() - 60;
 	int minimumBands = STYLES.CIRCLE.minimumBands;
 	int maximumBands = STYLES.CIRCLE.maximumBands;
 	float max_distance;
+	PImage testImage;
 
 
 	$(function() {
@@ -68,12 +70,18 @@
 			$( "#pickers" ).toggle( "slide", options, 500 );
 			$( "#slider" ).toggle( "slide", options, 500 );
 			$( "#numberOfBands" ).toggle( "slide", options, 500 );
+
+			visible == false? visible=true : visible=false;
+
+			// only save the preferences when the user hides the settings button
+			if (!visible){
 				savePreferences();
+			}
 		});
 
     	$("#colorPicker").spectrum({
     		showInitial: true,
-    		color: '#3F00FF', // Make sure this the same as choosenColor
+    		color: hex(choosenColor, 6),
     		change: function(color) {
         		tempColor = color.toRgbString();
         		setColors();
@@ -120,7 +128,10 @@
 			maximumBands = STYLES.STRIPES.maximumBands;
 		}
 
+		// if the numberOfBands is higher then the maximum? set the bands to the new maximum
 		numberOfBands > maximumBands? numberOfBands=maximumBands : numberOfBands;
+		// if numberOfbands is zero (after none is selected) set it random between min en max bands
+		numberOfBands == 0? numberOfBands=Math.floor((Math.random()*maximumBands)-minimumBands) : numberOfBands;
 	}
 
 	// checks if the browser / system supports HTML5 localstorage
@@ -134,10 +145,8 @@
 
 	// Will save the color, style and numberofbands in local storage
 	function savePreferences(){
-		if (supportsHtml5Storage() == false){
-			return false;
-		}
-		
+		if (supportsHtml5Storage() == false){ return false;	}
+
 		localStorage["visualiser.numberOfBands"] = numberOfBands;
 		localStorage["visualiser.color"] = choosenColor;
 		localStorage["visualiser.style"] = choosenStyle;
@@ -145,13 +154,14 @@
 	}
 
 	function loadPreferences(){
-		if (supportsHtml5Storage() == false){
-			return false;
-		}
+		if (supportsHtml5Storage() == false){ return false; }
 		if (localStorage.getItem("visualiser.numberOfBands") === null) { return false; }
+
 		numberOfBands = parseInt(localStorage["visualiser.numberOfBands"]);
 		choosenColor = parseInt(localStorage["visualiser.color"]);
 		choosenStyle = parseInt(localStorage["visualiser.style"]);
+
+		setMaxMinBands();
 		return true;
 	}
 
@@ -216,6 +226,7 @@
 		PFont fontA = loadFont("courier");
 		textFont(fontA, 14);
 		max_distance = dist(0, 0, spotifyWidth, spotifyHeight);
+		testImage = loadImage("/images/test.jpg");
 	}
 	
 	// call this method from within the audio data callback
@@ -225,6 +236,7 @@
 	
 	void draw(){
 		//background(0);
+		//externals.context.clearRect(0,0,width,height);
 		if (choosenStyle == STYLES.CIRCLE.value){
 			drawCircle();
 		} else if (choosenStyle == STYLES.BARS.value) {
@@ -233,8 +245,8 @@
 			drawNothing();
 		} else if (choosenStyle == STYLES.STRIPES.value) {
 			drawStripes();
-		} else if (choosenStyle == STYLES.SHAPES.value) {
-			drawShapes();
+		} else if (choosenStyle == STYLES.PICTURE.value) {
+			drawPicture();
 		}
 
 	}
@@ -342,12 +354,11 @@
 	}
 
 	void drawBars(){
-		numberOfBands = Math.floor((Math.random()*STYLES.BARS.maximumBands)+2);
-		fill(255);
+		fill(0);
 		rect(0, 0, width, height);
 
 		noFill();
-		fill(0);
+		fill(255);
 		text(frameRate,20,20);
 		for (var i = 0; i < numberOfBands; i++) {
 			text(fft[i],20,35 + (i*10));
@@ -419,7 +430,7 @@
 	}
 
 	void drawPicture(){
-
+		image(testImage, 0, 0);
 	}
 
 	//<input type='text' id="colorPicker" />
